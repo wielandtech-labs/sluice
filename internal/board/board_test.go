@@ -40,6 +40,7 @@ func sample() *fakeForge {
 			{Number: 8, Title: "approved", URL: "https://x/8", Checks: forge.ChecksPassing, Review: forge.ReviewApproved, UpdatedAt: now.Add(-4 * time.Hour)},
 			{Number: 9, Title: "sent back", URL: "https://x/9", Checks: forge.ChecksPassing, Review: forge.ReviewChangesRequested, UpdatedAt: now},
 			{Number: 10, Title: "no ci", URL: "https://x/10", Checks: forge.ChecksNone, UpdatedAt: now.Add(-5 * time.Hour)},
+			{Number: 12, Title: "reviews unreadable", URL: "https://x/12", Checks: forge.ChecksPassing, Review: forge.ReviewUnknown, UpdatedAt: now},
 			{Number: 11, Title: "sent back and red", URL: "https://x/11", Checks: forge.ChecksFailing, FailingChecks: []string{"lint"}, Review: forge.ReviewChangesRequested, UpdatedAt: now.Add(-6 * time.Hour)},
 		},
 		issues: []forge.Issue{
@@ -84,7 +85,7 @@ func TestRefreshErrorKeepsOldData(t *testing.T) {
 	b.Refresh(context.Background())
 
 	p, _ := b.Project("o/r")
-	if p.Err != "boom" || len(p.PRs) != 9 || p.FetchedAt.IsZero() {
+	if p.Err != "boom" || len(p.PRs) != 10 || p.FetchedAt.IsZero() {
 		t.Errorf("project after failed refresh = err %q, %d PRs, fetched %v", p.Err, len(p.PRs), p.FetchedAt)
 	}
 }
@@ -116,6 +117,11 @@ func TestPages(t *testing.T) {
 	page := get(http.MethodGet, "/p/o/r")
 	if body := page.Body.String(); strings.Contains(body, "<script>alert") || strings.Contains(body, `href="javascript:`) {
 		t.Error("forge text was not escaped")
+	}
+	for _, badge := range []string{`<span class="badge passing">approved</span>`, `<span class="badge pending">changes requested</span>`} {
+		if !strings.Contains(page.Body.String(), badge) {
+			t.Errorf("project page missing %s", badge)
+		}
 	}
 	if page.Header().Get("Content-Security-Policy") == "" {
 		t.Error("missing Content-Security-Policy")

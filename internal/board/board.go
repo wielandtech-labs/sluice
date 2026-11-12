@@ -136,9 +136,10 @@ func (b *Board) Inbox() []InboxItem {
 
 // inboxFor applies the inbox rules to one project. A non-draft pull request
 // needs a human when its checks fail, when it is approved and can be merged,
-// or when nobody has reviewed it yet. Draft pull requests, pull requests whose
-// checks are still running or unknown, and pull requests with changes
-// requested (which wait on the author) are left out. An issue needs a human
+// or when nobody has reviewed its head commit yet. Draft pull requests, pull
+// requests whose checks are still running or unknown, and pull requests whose
+// reviews are unknown or request changes to the head commit (those wait on the
+// author until the next push) are left out. An issue needs a human
 // when it carries humanLabel.
 func inboxFor(p Project, humanLabel string) []InboxItem {
 	var items []InboxItem
@@ -150,7 +151,7 @@ func inboxFor(p Project, humanLabel string) []InboxItem {
 		switch {
 		case pr.Checks == forge.ChecksFailing:
 			reason = "checks failing: " + strings.Join(pr.FailingChecks, ", ")
-		case pr.Review == forge.ReviewChangesRequested:
+		case pr.Review == forge.ReviewChangesRequested, pr.Review == forge.ReviewUnknown:
 			continue
 		case pr.Review == forge.ReviewApproved:
 			reason = "approved, ready to merge"

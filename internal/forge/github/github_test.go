@@ -43,7 +43,7 @@ func TestOpenPullRequests(t *testing.T) {
 		"/repos/o/r/commits/aaa/status":     `{"statuses":[]}`,
 		"/repos/o/r/commits/bbb/check-runs": `{"check_runs":[]}`,
 		"/repos/o/r/commits/bbb/status":     `{"statuses":[]}`,
-		"/repos/o/r/pulls/1/reviews":        `[{"user":{"login":"x"},"state":"APPROVED"}]`,
+		"/repos/o/r/pulls/1/reviews":        `[{"user":{"login":"x"},"state":"APPROVED","commit_id":"aaa","author_association":"OWNER"}]`,
 	})
 	prs, err := c.OpenPullRequests(context.Background(), "o/r")
 	if err != nil {
@@ -61,8 +61,8 @@ func TestOpenPullRequests(t *testing.T) {
 	if prs[0].Review != forge.ReviewApproved {
 		t.Errorf("pr 1 review = %q", prs[0].Review)
 	}
-	// The reviews call for pr 2 returns 404 and is treated as unreviewed.
-	if prs[1].Review != forge.ReviewNone {
+	// The reviews call for pr 2 returns 404.
+	if prs[1].Review != forge.ReviewUnknown {
 		t.Errorf("pr 2 review = %q", prs[1].Review)
 	}
 	if !prs[1].Draft || prs[1].Checks != forge.ChecksNone {
@@ -145,7 +145,14 @@ func TestErrorIncludesStatus(t *testing.T) {
 }
 
 func TestSummariseReviews(t *testing.T) {
-	r := func(user, state string) apiReview { return apiReview{User: apiUser{Login: user}, State: state} }
+	r := func(user, state string) apiReview {
+		return apiReview{User: apiUser{Login: user}, State: state, CommitID: "head", AuthorAssociation: "COLLABORATOR"}
+	}
+	old := r("a", "APPROVED")
+	old.CommitID = "earlier"
+	stranger := r("s", "CHANGES_REQUESTED")
+	stranger.AuthorAssociation = "NONE"
+	ghost := r("", "APPROVED")
 	cases := []struct {
 		name    string
 		reviews []apiReview
@@ -158,9 +165,12 @@ func TestSummariseReviews(t *testing.T) {
 		{"later approval replaces request", []apiReview{r("a", "CHANGES_REQUESTED"), r("a", "APPROVED")}, forge.ReviewApproved},
 		{"request outweighs approval", []apiReview{r("a", "APPROVED"), r("b", "CHANGES_REQUESTED")}, forge.ReviewChangesRequested},
 		{"dismissed", []apiReview{r("a", "CHANGES_REQUESTED"), r("a", "DISMISSED")}, forge.ReviewNone},
+		{"review of an earlier commit", []apiReview{old}, forge.ReviewNone},
+		{"stranger cannot block", []apiReview{r("a", "APPROVED"), stranger}, forge.ReviewApproved},
+		{"deleted user", []apiReview{ghost}, forge.ReviewNone},
 	}
 	for _, tc := range cases {
-		if got := summariseReviews(tc.reviews); got != tc.want {
+		if got := summariseReviews(tc.reviews, "head"); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
 		}
 	}
