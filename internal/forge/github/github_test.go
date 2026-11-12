@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/wielandtech-labs/sluice/pkg/forge"
@@ -39,7 +40,9 @@ func TestOpenPullRequests(t *testing.T) {
 			{"name":"test","status":"completed","conclusion":"failure"},
 			{"name":"build","status":"completed","conclusion":"success"},
 			{"name":"lint","status":"in_progress","conclusion":null}]}`,
+		"/repos/o/r/commits/aaa/status":     `{"statuses":[]}`,
 		"/repos/o/r/commits/bbb/check-runs": `{"check_runs":[]}`,
+		"/repos/o/r/commits/bbb/status":     `{"statuses":[]}`,
 	})
 	prs, err := c.OpenPullRequests(context.Background(), "o/r")
 	if err != nil {
@@ -74,11 +77,35 @@ func TestOpenIssuesSkipsPullRequests(t *testing.T) {
 	}
 }
 
+func TestChecksIncludeCommitStatuses(t *testing.T) {
+	routes := map[string]string{
+		"/repos/o/r/commits/aaa/check-runs": `{"check_runs":[{"name":"build","status":"completed","conclusion":"success"}]}`,
+		"/repos/o/r/commits/aaa/status":     `{"statuses":[{"context":"ci/external","state":"failure"}]}`,
+		"/repos/o/r/commits/bbb/check-runs": `{"check_runs":[]}`,
+		"/repos/o/r/commits/bbb/status":     `{"statuses":[{"context":"ci/external","state":"pending"}]}`,
+		"/repos/o/r/commits/ccc/check-runs": `{"check_runs":[]}`,
+	}
+	c := testClient(t, routes)
+	if state, failing := c.checks(context.Background(), "o/r", "aaa"); state != forge.ChecksFailing || !reflect.DeepEqual(failing, []string{"ci/external"}) {
+		t.Errorf("aaa = %s %v", state, failing)
+	}
+	if state, _ := c.checks(context.Background(), "o/r", "bbb"); state != forge.ChecksPending {
+		t.Errorf("bbb = %s", state)
+	}
+	// The status call for ccc returns 404: the state is unknown, not an error.
+	if state, _ := c.checks(context.Background(), "o/r", "ccc"); state != forge.ChecksUnknown {
+		t.Errorf("ccc = %s", state)
+	}
+}
+
 func TestListFollowsPages(t *testing.T) {
+	var mu sync.Mutex
 	var pages []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page := r.URL.Query().Get("page")
+		mu.Lock()
 		pages = append(pages, page)
+		mu.Unlock()
 		n := 0
 		switch page {
 		case "1":
@@ -94,6 +121,8 @@ func TestListFollowsPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	mu.Lock()
+	defer mu.Unlock()
 	if len(issues) != pageSize+3 || !reflect.DeepEqual(pages, []string{"1", "2"}) {
 		t.Errorf("got %d issues over pages %v", len(issues), pages)
 	}

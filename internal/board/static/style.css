@@ -31,5 +31,5 @@ tr:last-child td { border-bottom: 0; }
 .badge.passing { color: var(--ok); }
 .badge.failing { color: var(--bad); }
 .badge.pending { color: var(--wait); }
-.badge.none { color: var(--muted); }
+.badge.none, .badge.unknown { color: var(--muted); }
 .count { color: var(--bad); }

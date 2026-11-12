@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// CheckState summarises all check runs on a commit.
+// CheckState summarises all check runs and commit statuses on a commit.
 type CheckState string
 
 const (
@@ -17,6 +17,8 @@ const (
 	ChecksFailing CheckState = "failing"
 	ChecksPending CheckState = "pending"
 	ChecksNone    CheckState = "none"
+	// ChecksUnknown means the forge could not be asked.
+	ChecksUnknown CheckState = "unknown"
 )
 
 // PullRequest is an open pull request and the check state of its head commit.

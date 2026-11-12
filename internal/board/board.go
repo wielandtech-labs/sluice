@@ -68,26 +68,41 @@ func (b *Board) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
+// refreshWorkers bounds how many repos are read at once, so a slow repo does
+// not hold up the rest and the forge is not hit with one large burst.
+const refreshWorkers = 4
+
 // Refresh fetches every repo once. A failed repo keeps its previous data and
 // records the error.
 func (b *Board) Refresh(ctx context.Context) {
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, refreshWorkers)
 	for _, repo := range b.repos {
-		prs, err := b.forge.OpenPullRequests(ctx, repo)
-		var issues []forge.Issue
-		if err == nil {
-			issues, err = b.forge.OpenIssues(ctx, repo)
-		}
-		b.mu.Lock()
-		p := b.projects[repo]
-		if err != nil {
-			p.Err = err.Error()
-			slog.Warn("refresh failed", "repo", repo, "err", err)
-		} else {
-			p = Project{Repo: repo, PRs: prs, Issues: issues, FetchedAt: time.Now()}
-		}
-		b.projects[repo] = p
-		b.mu.Unlock()
+		slots <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-slots }()
+			b.refreshRepo(ctx, repo)
+		})
 	}
+	wg.Wait()
+}
+
+func (b *Board) refreshRepo(ctx context.Context, repo string) {
+	prs, err := b.forge.OpenPullRequests(ctx, repo)
+	var issues []forge.Issue
+	if err == nil {
+		issues, err = b.forge.OpenIssues(ctx, repo)
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	p := b.projects[repo]
+	if err != nil {
+		p.Err = err.Error()
+		slog.Warn("refresh failed", "repo", repo, "err", err)
+	} else {
+		p = Project{Repo: repo, PRs: prs, Issues: issues, FetchedAt: time.Now()}
+	}
+	b.projects[repo] = p
 }
 
 // Projects returns all projects in configured order.
@@ -122,11 +137,11 @@ func (b *Board) Inbox() []InboxItem {
 // inboxFor applies the inbox rules to one project: a non-draft pull request
 // needs a human when its checks fail or when it is ready for review; an issue
 // needs a human when it carries humanLabel. Draft pull requests and pull
-// requests with checks still running are left out.
+// requests whose checks are still running or unknown are left out.
 func inboxFor(p Project, humanLabel string) []InboxItem {
 	var items []InboxItem
 	for _, pr := range p.PRs {
-		if pr.Draft || pr.Checks == forge.ChecksPending {
+		if pr.Draft || pr.Checks == forge.ChecksPending || pr.Checks == forge.ChecksUnknown {
 			continue
 		}
 		reason := "ready for review"

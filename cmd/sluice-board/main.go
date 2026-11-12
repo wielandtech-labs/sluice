@@ -13,10 +13,12 @@ import (
 	"errors"
 	"flag"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -40,11 +42,13 @@ func main() {
 		if r == "" {
 			continue
 		}
-		if !repoPattern.MatchString(r) {
+		if !validRepo(r) {
 			slog.Error("repository must be owner/name", "repo", r)
 			os.Exit(2)
 		}
-		repos = append(repos, r)
+		if !slices.Contains(repos, r) {
+			repos = append(repos, r)
+		}
 	}
 	if len(repos) == 0 {
 		slog.Error("no repositories given; use -repos or SLUICE_REPOS")
@@ -64,16 +68,49 @@ func main() {
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      30 * time.Second,
 	}
+	drained := make(chan struct{})
 	go func() {
+		defer close(drained)
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		srv.Shutdown(shutdown)
 	}()
 
+	if !loopback(*listen) {
+		slog.Warn("the board has no authentication and shows data from every listed repository; put it behind an authenticating proxy", "addr", *listen)
+	}
 	slog.Info("sluice-board listening", "addr", *listen, "repos", len(repos))
 	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("server failed", "err", err)
 		os.Exit(1)
 	}
+	<-drained
+}
+
+// validRepo reports whether r is owner/name with no path tricks.
+func validRepo(r string) bool {
+	if !repoPattern.MatchString(r) {
+		return false
+	}
+	owner, name, _ := strings.Cut(r, "/")
+	for _, part := range []string{owner, name} {
+		if part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+// loopback reports whether addr binds only to a loopback address.
+func loopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

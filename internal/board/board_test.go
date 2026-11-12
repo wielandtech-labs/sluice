@@ -36,6 +36,7 @@ func sample() *fakeForge {
 			{Number: 2, Title: "ready", URL: "https://x/2", Checks: forge.ChecksPassing, UpdatedAt: now.Add(-1 * time.Hour)},
 			{Number: 3, Title: "running", URL: "https://x/3", Checks: forge.ChecksPending, UpdatedAt: now},
 			{Number: 4, Title: "wip", URL: "https://x/4", Draft: true, Checks: forge.ChecksFailing, UpdatedAt: now},
+			{Number: 7, Title: "unreadable", URL: "https://x/7", Checks: forge.ChecksUnknown, UpdatedAt: now},
 		},
 		issues: []forge.Issue{
 			{Number: 5, Title: "<script>alert(1)</script>", URL: "https://x/5", Labels: []string{"needs-human"}, UpdatedAt: now.Add(-2 * time.Hour)},
@@ -76,7 +77,7 @@ func TestRefreshErrorKeepsOldData(t *testing.T) {
 	b.Refresh(context.Background())
 
 	p, _ := b.Project("o/r")
-	if p.Err != "boom" || len(p.PRs) != 4 || p.FetchedAt.IsZero() {
+	if p.Err != "boom" || len(p.PRs) != 5 || p.FetchedAt.IsZero() {
 		t.Errorf("project after failed refresh = err %q, %d PRs, fetched %v", p.Err, len(p.PRs), p.FetchedAt)
 	}
 }
