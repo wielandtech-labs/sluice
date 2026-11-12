@@ -52,15 +52,19 @@ Nothing an agent says about its own work counts as evidence.
   not to a branch. A write token in the sandbox would therefore allow a push
   to the default branch.
 - Control: the sandbox gets a read-only token. The agent commits locally; the
-  courier, outside the sandbox, pushes only to `sluice/run-<id>`.
+  courier, outside the sandbox, pushes only to `sluice/run-<id>`, using a
+  single-use write token the gate mints for that repo after the diff check.
 
 ### T3. Agent edits CI to steal secrets
 
 - A pushed branch that changes a workflow file runs that workflow with the
   repo's secrets before anyone reviews it.
-- Control: the courier checks the diff before pushing. Changes to protected
-  paths (`.github/**`, the policy file, anything the policy lists) are held
-  for a human approval of that exact diff, before the push.
+- Control: the Sluice App does not hold the `workflows` permission, so it
+  cannot push or merge changes to `.github/workflows/**`. The courier hands
+  such a diff to a human as a patch.
+- The courier checks every other diff before pushing. Changes to protected
+  paths (the rest of `.github/**`, the policy file, anything the policy
+  lists) are held for a human approval of that exact diff, before the push.
 
 ### T4. Agent weakens the policy
 
@@ -85,8 +89,9 @@ Nothing an agent says about its own work counts as evidence.
 - The reviewer run has a separate identity, a fresh context, and sees the diff
   and the issue but not the author's transcript. The gate rejects a review
   from the run that authored the change.
-- Residual risk: both runs may share the same blind spots. Policy can require
-  a different model; high-risk paths should stay `human`.
+- Residual risk: both runs may share the same blind spots. Requiring a
+  different model for the reviewer is an open question (see the PRD), so
+  high-risk paths should stay `human`.
 
 ### T8. Prompt injection through untrusted content
 

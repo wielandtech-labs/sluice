@@ -34,7 +34,7 @@ tiers:
       checks: [build, test]
       approval: passkey
 
-# First match per file; the change gets the strictest tier among its files.
+# Every rule that matches a changed file applies; the strictest tier wins.
 rules:
   - paths: ["docs/**", "**/*.md"]
     tier: auto
@@ -45,11 +45,12 @@ rules:
 
 # Paths the courier will not push without human approval of the diff.
 # `.github/**` and `.sluice/**` are always protected, listed or not.
+# Workflow files (`.github/workflows/**`) are never pushed by Sluice at all.
 protected_paths:
   - "Dockerfile"
 
 tainted_runs:
-  max_tier: human        # a tainted run is never merged below this tier
+  min_tier: human        # a tainted run is never merged below this tier
 
 freeze:
   - when: slo_burn
@@ -74,15 +75,20 @@ budgets:
 unknown `version` is treated as `human` for every change. A file that matches
 no rule is `human`.
 
-**Tier order.** `auto` < `review` < `human`. A change takes the strictest tier
-among its changed files. Deleted and renamed files count under both old and
+**Tier order.** `auto` < `review` < `human`. Rule order does not matter: each
+changed file takes the strictest tier among all rules that match it, and the
+change takes the strictest tier among its files. In the example,
+`deploy/README.md` matches both the `auto` and the `human` rule and is `human`. Deleted and renamed files count under both old and
 new paths.
 
 **Built-in rules.** These cannot be overridden:
 
 - A change touching `.sluice/**` is `human`.
 - A change touching `.github/**` is `human` and its paths are protected.
-- A tainted run is at least `tainted_runs.max_tier` (default `human`).
+- A tainted run is at least `tainted_runs.min_tier` (default `human`).
+- A change touching `.github/workflows/**` is never pushed or merged by
+  Sluice. The App does not hold the `workflows` permission, so the diff is
+  handed to a human as a patch.
 - While any `freeze` condition holds, only `human` merges proceed.
 
 **Requirements.** Every item under a tier's `require` must hold at the PR's

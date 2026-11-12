@@ -74,9 +74,9 @@ deployments. Sluice never talks to the cluster with write access.
 
 | Component | Role | Credentials |
 |---|---|---|
-| `sluice-gate` | Evaluates policy, collects evidence, serves the approval page, merges, mints read tokens, writes the audit log | Forge App private key |
+| `sluice-gate` | Evaluates policy, collects evidence, serves the approval page, merges, mints read tokens and courier push tokens, writes the audit log | Forge App private key |
 | `sluice-board` | Web UI and read API over the database and read-only adapters | Read-only DB role, read-only metrics/cluster access |
-| `sluice-runner` | Launches sandboxed agent Jobs, then pushes the result to the run branch through the courier | Kubernetes Job creation in its namespace |
+| `sluice-runner` | Launches sandboxed agent Jobs, then pushes the result to the run branch through the courier | Kubernetes Job creation in its namespace; a single-use write token from the gate per courier push |
 | Postgres | State and append-only audit log | n/a |
 
 All three are Go binaries from one module. The board UI is server-rendered
@@ -135,10 +135,12 @@ them yet. The gate still controls the merge.
   deny egress with an allowlist, a read-only forge token for one repo, the
   model API key, and nothing else.
 - The agent commits locally. The **courier** (trusted, outside the sandbox)
-  inspects the diff and pushes it to `sluice/run-<id>`; diffs touching
-  protected paths wait for a human before the push.
-- Taint: a run that reads untrusted input is marked and capped at a lower
-  tier.
+  inspects the diff and pushes it to `sluice/run-<id>` with a single-use
+  write token minted by the gate for that repo; diffs touching protected
+  paths wait for a human before the push, and workflow-file changes are
+  handed to a human as a patch instead of being pushed.
+- Taint: a run that reads untrusted input is marked and can never merge below
+  the tier the policy sets for tainted runs.
 - Budgets per run, per project and per day (tokens, cost, wall time).
 - Transcript, cost and diff stored and linked from the timeline.
 
