@@ -1,0 +1,20 @@
+{{define "content"}}
+<h1>Projects</h1>
+<table>
+<thead><tr><th>Project</th><th class="num">Open PRs</th><th class="num">Failing</th><th class="num">Open issues</th><th class="num">Needs human</th><th>Refreshed</th></tr></thead>
+<tbody>
+{{range .Projects}}
+<tr>
+  <td><a href="/p/{{.Repo}}">{{.Repo}}</a></td>
+  <td class="num">{{len .PRs}}</td>
+  <td class="num">{{with failing .PRs}}<span class="badge failing">{{.}}</span>{{else}}0{{end}}</td>
+  <td class="num">{{len .Issues}}</td>
+  <td class="num">{{.NeedsHuman}}</td>
+  <td>{{if .Err}}<span class="badge failing" title="{{.Err}}">error</span> {{end}}{{if .FetchedAt.IsZero}}never{{else}}{{ago .FetchedAt}}{{end}}</td>
+</tr>
+{{else}}
+<tr><td colspan="6" class="empty">No projects configured.</td></tr>
+{{end}}
+</tbody>
+</table>
+{{end}}

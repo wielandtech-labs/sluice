@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="60">
+<title>{{.Title}} · Sluice</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <a class="brand" href="/">Sluice</a>
+  <nav>
+    <a href="/">Projects</a>
+    <a href="/inbox">Needs human{{if .InboxCount}} <span class="count">{{.InboxCount}}</span>{{end}}</a>
+  </nav>
+</header>
+<main>
+{{template "content" .}}
+</main>
+</body>
+</html>
+{{define "checks"}}<span class="badge {{.Checks}}"{{if .FailingChecks}} title="{{range $i, $c := .FailingChecks}}{{if $i}}, {{end}}{{$c}}{{end}}"{{end}}>{{.Checks}}</span>{{end}}
+{{define "stale"}}{{if .Err}}<p class="error">Refresh failed, showing older data: {{.Err}}</p>{{end}}{{end}}

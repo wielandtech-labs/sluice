@@ -1,0 +1,19 @@
+{{define "content"}}
+<h1>Needs human</h1>
+<table>
+<thead><tr><th>Project</th><th>Item</th><th>Title</th><th>Why</th><th>Updated</th></tr></thead>
+<tbody>
+{{range .Inbox}}
+<tr>
+  <td><a href="/p/{{.Repo}}">{{.Repo}}</a></td>
+  <td>{{.Kind}} #{{.Number}}</td>
+  <td><a href="{{.URL}}" rel="noopener noreferrer">{{.Title}}</a></td>
+  <td>{{.Reason}}</td>
+  <td>{{ago .UpdatedAt}}</td>
+</tr>
+{{else}}
+<tr><td colspan="5" class="empty">Nothing is waiting on you.</td></tr>
+{{end}}
+</tbody>
+</table>
+{{end}}
