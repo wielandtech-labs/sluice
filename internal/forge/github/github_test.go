@@ -43,6 +43,7 @@ func TestOpenPullRequests(t *testing.T) {
 		"/repos/o/r/commits/aaa/status":     `{"statuses":[]}`,
 		"/repos/o/r/commits/bbb/check-runs": `{"check_runs":[]}`,
 		"/repos/o/r/commits/bbb/status":     `{"statuses":[]}`,
+		"/repos/o/r/pulls/1/reviews":        `[{"user":{"login":"x"},"state":"APPROVED"}]`,
 	})
 	prs, err := c.OpenPullRequests(context.Background(), "o/r")
 	if err != nil {
@@ -56,6 +57,13 @@ func TestOpenPullRequests(t *testing.T) {
 	}
 	if prs[0].Author != "a" || prs[0].HeadSHA != "aaa" || prs[0].UpdatedAt.IsZero() {
 		t.Errorf("pr 1 fields = %+v", prs[0])
+	}
+	if prs[0].Review != forge.ReviewApproved {
+		t.Errorf("pr 1 review = %q", prs[0].Review)
+	}
+	// The reviews call for pr 2 returns 404 and is treated as unreviewed.
+	if prs[1].Review != forge.ReviewNone {
+		t.Errorf("pr 2 review = %q", prs[1].Review)
 	}
 	if !prs[1].Draft || prs[1].Checks != forge.ChecksNone {
 		t.Errorf("pr 2 = %+v", prs[1])
@@ -133,6 +141,28 @@ func TestErrorIncludesStatus(t *testing.T) {
 	_, err := c.OpenIssues(context.Background(), "o/missing")
 	if err == nil || !strings.Contains(err.Error(), "404") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+func TestSummariseReviews(t *testing.T) {
+	r := func(user, state string) apiReview { return apiReview{User: apiUser{Login: user}, State: state} }
+	cases := []struct {
+		name    string
+		reviews []apiReview
+		want    forge.ReviewState
+	}{
+		{"none", nil, forge.ReviewNone},
+		{"comments only", []apiReview{r("a", "COMMENTED")}, forge.ReviewNone},
+		{"approved", []apiReview{r("a", "APPROVED")}, forge.ReviewApproved},
+		{"comment keeps approval", []apiReview{r("a", "APPROVED"), r("a", "COMMENTED")}, forge.ReviewApproved},
+		{"later approval replaces request", []apiReview{r("a", "CHANGES_REQUESTED"), r("a", "APPROVED")}, forge.ReviewApproved},
+		{"request outweighs approval", []apiReview{r("a", "APPROVED"), r("b", "CHANGES_REQUESTED")}, forge.ReviewChangesRequested},
+		{"dismissed", []apiReview{r("a", "CHANGES_REQUESTED"), r("a", "DISMISSED")}, forge.ReviewNone},
+	}
+	for _, tc := range cases {
+		if got := summariseReviews(tc.reviews); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
 	}
 }
 

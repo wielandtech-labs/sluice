@@ -105,6 +105,11 @@ type apiCheckRun struct {
 	Conclusion string `json:"conclusion"`
 }
 
+type apiReview struct {
+	User  apiUser `json:"user"`
+	State string  `json:"state"`
+}
+
 type apiCombinedStatus struct {
 	Statuses []struct {
 		Context string `json:"context"`
@@ -143,9 +148,45 @@ func (c *Client) OpenPullRequests(ctx context.Context, repo string) ([]forge.Pul
 			UpdatedAt:     p.UpdatedAt,
 			Checks:        state,
 			FailingChecks: failing,
+			Review:        c.review(ctx, repo, p.Number),
 		})
 	}
 	return out, nil
+}
+
+// review reads the reviews on one pull request. If they cannot be read the
+// pull request is treated as unreviewed.
+func (c *Client) review(ctx context.Context, repo string, number int) forge.ReviewState {
+	reviews, err := list[apiReview](ctx, c, fmt.Sprintf("/repos/%s/pulls/%d/reviews?", repo, number))
+	if err != nil {
+		slog.Warn("reading reviews failed", "repo", repo, "pr", number, "err", err)
+		return forge.ReviewNone
+	}
+	return summariseReviews(reviews)
+}
+
+// summariseReviews takes reviews in the order they were submitted. Each
+// reviewer's latest approval, change request or dismissal counts; comments
+// do not change their standing. One standing change request outweighs any
+// number of approvals.
+func summariseReviews(reviews []apiReview) forge.ReviewState {
+	latest := map[string]string{}
+	for _, r := range reviews {
+		switch r.State {
+		case "APPROVED", "CHANGES_REQUESTED", "DISMISSED":
+			latest[r.User.Login] = r.State
+		}
+	}
+	state := forge.ReviewNone
+	for _, s := range latest {
+		switch s {
+		case "CHANGES_REQUESTED":
+			return forge.ReviewChangesRequested
+		case "APPROVED":
+			state = forge.ReviewApproved
+		}
+	}
+	return state
 }
 
 // checks reads check runs and commit statuses for one commit. If either

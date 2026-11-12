@@ -21,6 +21,16 @@ const (
 	ChecksUnknown CheckState = "unknown"
 )
 
+// ReviewState summarises the reviews on a pull request, taking each
+// reviewer's latest approval or change request.
+type ReviewState string
+
+const (
+	ReviewNone             ReviewState = "none"
+	ReviewApproved         ReviewState = "approved"
+	ReviewChangesRequested ReviewState = "changes requested"
+)
+
 // PullRequest is an open pull request and the check state of its head commit.
 type PullRequest struct {
 	Number        int
@@ -32,6 +42,7 @@ type PullRequest struct {
 	UpdatedAt     time.Time
 	Checks        CheckState
 	FailingChecks []string
+	Review        ReviewState
 }
 
 // Issue is an open issue. Pull requests are never returned as issues.
