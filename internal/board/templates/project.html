@@ -1,0 +1,41 @@
+{{define "content"}}
+<h1>{{.Project.Repo}}</h1>
+{{template "stale" .Project}}
+<p class="meta">{{if .Project.FetchedAt.IsZero}}Not fetched yet.{{else}}Refreshed {{ago .Project.FetchedAt}}.{{end}}</p>
+
+<h2>Pull requests</h2>
+<table>
+<thead><tr><th class="num">#</th><th>Title</th><th>Author</th><th>Checks</th><th>Updated</th></tr></thead>
+<tbody>
+{{range .Project.PRs}}
+<tr>
+  <td class="num">{{.Number}}</td>
+  <td><a href="{{.URL}}" rel="noopener noreferrer">{{.Title}}</a>{{if .Draft}} <span class="badge none">draft</span>{{end}}</td>
+  <td>{{.Author}}</td>
+  <td>{{template "checks" .}}</td>
+  <td>{{ago .UpdatedAt}}</td>
+</tr>
+{{else}}
+<tr><td colspan="5" class="empty">No open pull requests.</td></tr>
+{{end}}
+</tbody>
+</table>
+
+<h2>Issues</h2>
+<table>
+<thead><tr><th class="num">#</th><th>Title</th><th>Author</th><th>Labels</th><th>Updated</th></tr></thead>
+<tbody>
+{{range .Project.Issues}}
+<tr>
+  <td class="num">{{.Number}}</td>
+  <td><a href="{{.URL}}" rel="noopener noreferrer">{{.Title}}</a></td>
+  <td>{{.Author}}</td>
+  <td>{{range .Labels}}<span class="badge none">{{.}}</span> {{end}}</td>
+  <td>{{ago .UpdatedAt}}</td>
+</tr>
+{{else}}
+<tr><td colspan="5" class="empty">No open issues.</td></tr>
+{{end}}
+</tbody>
+</table>
+{{end}}
