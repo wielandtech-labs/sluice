@@ -8,7 +8,21 @@ code; Sluice decides what is allowed through.
 - **Board**: one page per project, from spec to production health.
 - **Runner**: sandboxes agents so they hold no forge write credentials.
 
-Status: design stage. Start with the docs:
+Status: early. The read-only board runs; the gate and runner are designed but
+not built.
+
+## Try the board
+
+```
+go build -o bin/sluice-board ./cmd/sluice-board
+SLUICE_GITHUB_TOKEN=... bin/sluice-board -repos owner/a,owner/b
+```
+
+Open http://127.0.0.1:8080. The token needs read access to the listed
+repositories and can be left unset for public ones. The board has no
+authentication, so keep it on loopback or behind an authenticating proxy.
+
+## Design
 
 - [Product requirements](docs/prd.md)
 - [Threat model](docs/threat-model.md)

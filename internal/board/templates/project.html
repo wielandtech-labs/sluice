@@ -5,7 +5,7 @@
 
 <h2>Pull requests</h2>
 <table>
-<thead><tr><th class="num">#</th><th>Title</th><th>Author</th><th>Checks</th><th>Updated</th></tr></thead>
+<thead><tr><th class="num">#</th><th>Title</th><th>Author</th><th>Checks</th><th>Review</th><th>Updated</th></tr></thead>
 <tbody>
 {{range .Project.PRs}}
 <tr>
@@ -13,10 +13,11 @@
   <td><a href="{{.URL}}" rel="noopener noreferrer">{{.Title}}</a>{{if .Draft}} <span class="badge none">draft</span>{{end}}</td>
   <td>{{.Author}}</td>
   <td>{{template "checks" .}}</td>
+  <td>{{if eq .Review "approved"}}<span class="badge passing">approved</span>{{else if eq .Review "changes requested"}}<span class="badge pending">changes requested</span>{{end}}</td>
   <td>{{ago .UpdatedAt}}</td>
 </tr>
 {{else}}
-<tr><td colspan="5" class="empty">No open pull requests.</td></tr>
+<tr><td colspan="6" class="empty">No open pull requests.</td></tr>
 {{end}}
 </tbody>
 </table>

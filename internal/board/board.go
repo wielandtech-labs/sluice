@@ -134,19 +134,31 @@ func (b *Board) Inbox() []InboxItem {
 	return items
 }
 
-// inboxFor applies the inbox rules to one project: a non-draft pull request
-// needs a human when its checks fail or when it is ready for review; an issue
-// needs a human when it carries humanLabel. Draft pull requests and pull
-// requests whose checks are still running or unknown are left out.
+// inboxFor applies the inbox rules to one project. A non-draft pull request
+// needs a human when its checks fail, when it is approved and can be merged,
+// or when nobody has reviewed its head commit yet. Draft pull requests, pull
+// requests whose checks are still running or unknown, and pull requests whose
+// reviews are unknown or request changes to the head commit (those wait on the
+// author until the next push) are left out. An issue needs a human
+// when it carries humanLabel.
 func inboxFor(p Project, humanLabel string) []InboxItem {
 	var items []InboxItem
 	for _, pr := range p.PRs {
 		if pr.Draft || pr.Checks == forge.ChecksPending || pr.Checks == forge.ChecksUnknown {
 			continue
 		}
-		reason := "ready for review"
-		if pr.Checks == forge.ChecksFailing {
+		var reason string
+		switch {
+		case pr.Checks == forge.ChecksFailing:
 			reason = "checks failing: " + strings.Join(pr.FailingChecks, ", ")
+		case pr.Review == forge.ReviewChangesRequested, pr.Review == forge.ReviewUnknown:
+			continue
+		case pr.Review == forge.ReviewApproved:
+			reason = "approved, ready to merge"
+		case pr.Checks == forge.ChecksNone:
+			reason = "ready for review, no checks ran"
+		default:
+			reason = "ready for review"
 		}
 		items = append(items, InboxItem{p.Repo, "PR", pr.Number, pr.Title, pr.URL, reason, pr.UpdatedAt})
 	}

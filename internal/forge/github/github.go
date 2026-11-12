@@ -62,13 +62,16 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
-// list reads every page of a JSON array endpoint. path must already contain a
-// query string.
+// list reads every page of a JSON array endpoint.
 func list[T any](ctx context.Context, c *Client, path string) ([]T, error) {
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
 	var all []T
 	for page := 1; page <= maxPages; page++ {
 		var items []T
-		if err := c.get(ctx, fmt.Sprintf("%s&per_page=%d&page=%d", path, pageSize, page), &items); err != nil {
+		if err := c.get(ctx, fmt.Sprintf("%s%sper_page=%d&page=%d", path, sep, pageSize, page), &items); err != nil {
 			return nil, err
 		}
 		all = append(all, items...)
@@ -103,6 +106,13 @@ type apiCheckRun struct {
 	Name       string `json:"name"`
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion"`
+}
+
+type apiReview struct {
+	User              apiUser `json:"user"`
+	State             string  `json:"state"`
+	CommitID          string  `json:"commit_id"`
+	AuthorAssociation string  `json:"author_association"`
 }
 
 type apiCombinedStatus struct {
@@ -143,9 +153,55 @@ func (c *Client) OpenPullRequests(ctx context.Context, repo string) ([]forge.Pul
 			UpdatedAt:     p.UpdatedAt,
 			Checks:        state,
 			FailingChecks: failing,
+			Review:        c.review(ctx, repo, p.Number, p.Head.SHA),
 		})
 	}
 	return out, nil
+}
+
+// review reads the reviews on one pull request. If they cannot be read the
+// state is unknown.
+func (c *Client) review(ctx context.Context, repo string, number int, headSHA string) forge.ReviewState {
+	reviews, err := list[apiReview](ctx, c, fmt.Sprintf("/repos/%s/pulls/%d/reviews", repo, number))
+	if err != nil {
+		slog.Warn("reading reviews failed", "repo", repo, "pr", number, "err", err)
+		return forge.ReviewUnknown
+	}
+	return summariseReviews(reviews, headSHA)
+}
+
+// summariseReviews takes reviews in the order they were submitted. Only
+// reviews of headSHA by people with write access count, so a drive-by review
+// on a public repository or a review of an earlier commit changes nothing.
+// Each reviewer's latest approval, change request or dismissal counts;
+// comments do not change their standing. One standing change request
+// outweighs any number of approvals.
+func summariseReviews(reviews []apiReview, headSHA string) forge.ReviewState {
+	latest := map[string]string{}
+	for _, r := range reviews {
+		if r.CommitID != headSHA || r.User.Login == "" {
+			continue
+		}
+		switch r.AuthorAssociation {
+		case "OWNER", "MEMBER", "COLLABORATOR":
+		default:
+			continue
+		}
+		switch r.State {
+		case "APPROVED", "CHANGES_REQUESTED", "DISMISSED":
+			latest[r.User.Login] = r.State
+		}
+	}
+	state := forge.ReviewNone
+	for _, s := range latest {
+		switch s {
+		case "CHANGES_REQUESTED":
+			return forge.ReviewChangesRequested
+		case "APPROVED":
+			state = forge.ReviewApproved
+		}
+	}
+	return state
 }
 
 // checks reads check runs and commit statuses for one commit. If either
